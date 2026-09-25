@@ -19,7 +19,7 @@
 </section>
 <section id="roleGateway" class="role-gateway">
 <button class="role-card role-directiva" data-open="loginPanel"><span class="role-icon">♜</span><span class="role-kicker">ÁREA PRIVADA</span><strong>Directiva</strong><small>Acceso al centro de gestión de NOVA</small><span class="role-arrow">→</span></button>
-<button class="role-card role-integrante" data-open="registerPanel"><span class="role-icon">◇</span><span class="role-kicker">NUEVA GENERACIÓN</span><strong>Integrante</strong><small>Completa tu pre-registro para formar parte del club</small><span class="role-arrow">→</span></button>
+<a class="role-card role-integrante" href="member.html"><span class="role-icon">◇</span><span class="role-kicker">ÁREA PRIVADA</span><strong>Integrante</strong><small>Acceso exclusivo para integrantes aprobados por la Directiva</small><span class="role-arrow">→</span></a>
 </section>
 <section id="loginPanel" class="form-screen">
 <button class="back-link" data-back>← Volver</button>
@@ -29,7 +29,7 @@
 <label>Contraseña<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="••••••••"></label>
 <button class="primary" type="submit"><span>Entrar al dashboard</span><b>↗</b></button><p id="loginMsg" class="msg"></p>
 </form></section>
-<section id="registerPanel" class="form-screen">
+<section id="registerPanel" class="form-screen" aria-hidden="true">
 <button class="back-link" data-back>← Volver</button>
 <div class="form-heading"><span class="section-tag">INTEGRANTE</span><h1>Tu lugar en NOVA comienza aquí</h1><p>Completa tu pre-registro. La Directiva revisará tu solicitud antes de aprobarla.</p></div>
 <form id="registerForm" class="glass-form">
