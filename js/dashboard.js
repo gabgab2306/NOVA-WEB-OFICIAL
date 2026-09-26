@@ -31,7 +31,7 @@
   };
 
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", ""\"": "&quot;", "'": "&#39;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
 
   function notify(message) {
@@ -107,7 +107,7 @@
       '</div>' +
       metrics() +
       '<div class="dashboard-grid">' +
-        '<section class="panel"><div class="panel-head"><h2>Rendimiento de NOVA</h2><p>Datos actuales</p></div><div class="chartbox"><canvas id="homeChart"></canvas></div></section>' +
+        '<section class="panel"><div class="panel-head"><h2>Rendimiento de NOVA · V2</h2><p>Vista actualizada del sistema</p></div><div class="chartbox"><canvas id="homeChart"></canvas></div></section>' +
         '<section class="panel"><div class="panel-head"><h2>Ranking de Casas</h2><p>Actualización en vivo</p></div><div class="ranking">' +
           data.houses.map((h, i) =>
             '<div class="rank"><span class="rank-number">#' + (i + 1) + '</span>' +
@@ -136,7 +136,7 @@
     if (!canvas || !window.Chart) return;
     try {
       chart = new window.Chart(canvas, {
-        type: "line",
+        type: "bar",
         data: {
           labels: ["Integrantes", "Pre-registros", "Actividades", "Competencias"],
           datasets: [{
@@ -144,9 +144,9 @@
             borderColor: "#4d9fff",
             backgroundColor: "#4d9fff18",
             fill: true,
-            tension: 0.38,
-            pointRadius: 4,
-            pointBackgroundColor: "#dfbc66"
+            borderRadius: 8,
+            borderWidth: 0,
+            backgroundColor: ["#4d9fff", "#dfbc66", "#62bd86", "#d77872"]
           }]
         },
         options: {
