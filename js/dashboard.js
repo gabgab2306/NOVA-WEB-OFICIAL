@@ -1,1 +1,478 @@
-const sb=supabase.createClient("https://hogbjrbaeedlyglegjle.supabase.co","sb_publishable_NWG23rPztabdaFhEyNtN5w_rrCeMTC5",{auth:{persistSession:true,autoRefreshToken:true}});const view=document.getElementById("view"),title=document.getElementById("viewTitle"),subtitle=document.getElementById("viewSubtitle"),toast=document.getElementById("toast");let me=null,data={members:[],pending:[],houses:[],activities:[],competitions:[],evaluations:[]},chart=null;const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));function notify(t){toast.textContent=t;toast.classList.add("show");clearTimeout(notify.t);notify.t=setTimeout(()=>toast.classList.remove("show"),2600)}async function guard(){const {data:{session}}=await sb.auth.getSession();if(!session){location.href="index.html";return false}const {data:d,error}=await sb.from("directiva").select("user_id,nombre,email").eq("user_id",session.user.id).maybeSingle();if(error||!d){await sb.auth.signOut();location.href="index.html";return false}me=d;document.getElementById("profileName").textContent=d.nombre;return true}async function load(){const queries={members:sb.from("integrantes").select("*").order("fecha_aprobacion",{ascending:false}),pending:sb.from("pre_registros").select("*").order("fecha_registro",{ascending:false}),houses:sb.from("casas").select("*").order("puntos",{ascending:false}),activities:sb.from("actividades").select("*").order("fecha",{ascending:true}),competitions:sb.from("competencias").select("*").order("fecha",{ascending:true}),evaluations:sb.from("evaluaciones").select("*").order("fecha_evaluacion",{ascending:false})};const entries=Object.entries(queries);const results=await Promise.all(entries.map(async([key,q])=>[key,await q]));const errors=[];for(const [key,r] of results){if(r.error){errors.push(key+": "+r.error.message);continue}if(key==="members")data.members=r.data||[];if(key==="pending")data.pending=(r.data||[]).filter(x=>x.estado==="pendiente");if(key==="houses")data.houses=r.data||[];if(key==="activities")data.activities=r.data||[];if(key==="competitions")data.competitions=r.data||[];if(key==="evaluations")data.evaluations=r.data||[]}if(errors.length){console.error("NOVA load errors",errors);notify("Error cargando datos: "+errors[0])}}const active=()=>data.members.filter(x=>x.activo).length;function houseSymbol(n){return {Pegaso:"♧",Cronos:"⌛","Fénix":"ϟ",Argos:"◉",Olimpo:"♛"}[n]||"✦"}function houseStyle(n){return {Pegaso:"#e9e5da",Cronos:"#4f99ff","Fénix":"#dfbc66",Argos:"#62bd86",Olimpo:"#d77872"}[n]||"#5b9dff"}function metrics(){return "<div class='metric-grid'><div class='metric-card'><span>INTEGRANTES ACTIVOS</span><b>"+active()+"</b><small>de 200 cupos</small></div><div class='metric-card'><span>PRE-REGISTROS</span><b>"+data.pending.length+"</b><small>esperando revisión</small></div><div class='metric-card'><span>CASAS</span><b>"+data.houses.length+"</b><small>competencia activa</small></div><div class='metric-card'><span>ACTIVIDADES</span><b>"+data.activities.length+"</b><small>registradas</small></div></div>";}function home(){view.innerHTML='<div class="hero-grid"><section class="welcome"><span class="eyebrow">NOVA · 2026 / 2027</span><h2>El centro de mando para una generación que lidera.</h2><p>Gestiona integrantes, solicitudes, casas, actividades y competencias desde un solo espacio. Los cambios de NOVA aparecen aquí con datos reales de Supabase.</p><span class="status"><i class="status-dot"></i>Sistema conectado</span></section><div class="quick"><div class="quick-card"><span>PENDIENTES</span><b>'+data.pending.length+'</b><small>Solicitudes por revisar</small></div><div class="quick-card"><span>CAPACIDAD</span><b>'+active()+' / 200</b><small>Cupos ocupados</small></div><div class="quick-card"><span>ACTIVIDADES</span><b>'+data.activities.length+'</b><small>En el sistema</small></div><div class="quick-card"><span>COMPETENCIAS</span><b>'+data.competitions.length+'</b><small>En el sistema</small></div></div></div>'+metrics()+'<div class="dashboard-grid"><section class="panel"><div class="panel-head"><h2>Rendimiento de NOVA</h2><p>Datos actuales</p></div><div class="chartbox"><canvas id="homeChart"></canvas></div></section><section class="panel"><div class="panel-head"><h2>Ranking de Casas</h2><p>Actualización en vivo</p></div><div class="ranking">'+data.houses.map((h,i)=>'<div class="rank"><span class="rank-number">#'+(i+1)+'</span><span class="rank-symbol" style="--house:'+houseStyle(h.nombre)+'">'+houseSymbol(h.nombre)+'</span><span>'+esc(h.nombre)+'</span><b>'+Number(h.puntos||0)+' pts</b></div>').join("")+'</div></section></div><section class="panel"><div class="panel-head"><h2>Próximos movimientos</h2><p>Actividades</p></div>'+list(data.activities.slice(0,5))+'</section>';drawHomeChart()}function drawHomeChart(){const c=document.getElementById("homeChart");if(!c||typeof Chart==="undefined"){console.warn("Chart.js no está disponible.");return}if(chart)chart.destroy();chart=new Chart(c,{type:"line",data:{labels:["Integrantes","Pre-registros","Actividades","Competencias"],datasets:[{data:[active(),data.pending.length,data.activities.length,data.competitions.length],borderColor:"#4d9fff",backgroundColor:"#4d9fff18",fill:true,tension:.38,pointRadius:4,pointBackgroundColor:"#dfbc66"}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:"#71809a"}},y:{beginAtZero:true,grid:{color:"#1d293c"},ticks:{color:"#71809a",precision:0}}}}})}function list(a){return a.length?a.map(x=>'<div class="row"><div><b>'+esc(x.nombre)+'</b><small>'+esc(x.fecha||"Sin fecha")+' · '+esc(x.estado||"Sin estado")+'</small></div></div>').join(""):'<p class="empty">No hay registros todavía.</p>'}function members(){view.innerHTML='<section class="panel"><div class="panel-head"><h2>Integrantes</h2><span class="muted">'+active()+' activos</span></div><div class="toolbar"><input id="search" placeholder="Buscar nombre, correo o usuario"></div><div class="table-wrap"><table class="table"><thead><tr><th>Nombre</th><th>Usuario</th><th>Casa</th><th>Correo</th><th>Estado</th></tr></thead><tbody id="memberRows">'+memberRows(data.members)+'</tbody></table></div></section>';document.getElementById("search").oninput=e=>{const z=e.target.value.toLowerCase();document.getElementById("memberRows").innerHTML=memberRows(data.members.filter(x=>(x.nombre_completo+" "+x.email+" "+x.username).toLowerCase().includes(z)));bindMemberHouses()};bindMemberHouses()}function bindMemberHouses(){document.querySelectorAll("[data-member-house]").forEach(s=>s.onchange=async()=>{const {error}=await sb.from("integrantes").update({casa_id:s.value||null}).eq("id",s.dataset.memberHouse);if(error)notify(error.message);else{const m=data.members.find(x=>x.id===s.dataset.memberHouse);if(m)m.casa_id=s.value||null;notify("Casa actualizada.")}})}function memberRows(a){return a.length?a.map(x=>'<tr><td><b>'+esc(x.nombre_completo)+'</b></td><td>'+esc(x.username)+'</td><td><select data-member-house="'+x.id+'" style="background:#080d17;color:#fff;border:1px solid #263249;border-radius:8px;padding:7px"><option value="">Sin asignar</option>'+data.houses.map(h=>'<option value="'+h.id+'" '+(x.casa_id===h.id?"selected":"")+'>'+esc(h.nombre)+'</option>').join("")+'</select></td><td>'+esc(x.email)+'</td><td><span class="badge">'+(x.activo?"Activo":"Inactivo")+'</span></td></tr>').join(""):'<tr><td colspan="5" class="empty">No hay integrantes.</td></tr>'}function prereg(){view.innerHTML='<section class="panel"><div class="panel-head"><h2>Solicitudes pendientes</h2><span class="muted">'+data.pending.length+' por revisar</span></div>'+(data.pending.length?data.pending.map(x=>'<div class="row"><div><b>'+esc(x.nombre_completo)+'</b><small>'+esc(x.curso)+' '+esc(x.seccion)+' · '+esc(x.email)+' · '+esc(x.username)+'</small></div><div class="actions"><button class="btn ok" data-ok="'+x.id+'">Aprobar</button><button class="btn no" data-no="'+x.id+'">Rechazar</button></div></div>').join(""):'<p class="empty">No hay solicitudes pendientes.</p>')+'</section>';document.querySelectorAll("[data-ok]").forEach(b=>b.onclick=async()=>{b.disabled=true;const {error}=await sb.rpc("aprobar_pre_registro",{p_pre_registro_id:b.dataset.ok});if(error)notify(error.message);else notify("Integrante aprobado correctamente.");await refresh("preregistros")});document.querySelectorAll("[data-no]").forEach(b=>b.onclick=async()=>{if(!confirm("¿Rechazar este pre-registro?"))return;const {error}=await sb.rpc("rechazar_pre_registro",{p_pre_registro_id:b.dataset.no});if(error)notify(error.message);else notify("Pre-registro rechazado.");await refresh("preregistros")})}function houses(){view.innerHTML='<section class="panel"><div class="panel-head"><h2>Casas</h2><span class="muted">Puntos directos · ranking vivo</span></div><div class="house-grid">'+data.houses.map(h=>'<article class="house" style="--house:'+houseStyle(h.nombre)+'"><div class="house-symbol">'+houseSymbol(h.nombre)+'</div><h3>'+esc(h.nombre)+'</h3><strong>'+Number(h.puntos||0)+'</strong> <small>pts</small><div style="display:flex;gap:7px;margin-top:13px"><input id="pts-'+h.id+'" type="number" min="1" placeholder="+ puntos" style="width:100%;background:#080d17;border:1px solid #263249;color:#fff;border-radius:9px;padding:8px"><button class="btn ok" data-house="'+h.id+'">Añadir</button></div></article>').join("")+'</div></section>';document.querySelectorAll("[data-house]").forEach(b=>b.onclick=async()=>{const n=Number(document.getElementById("pts-"+b.dataset.house).value);if(!Number.isInteger(n)||n<1){notify("Introduce una cantidad válida.");return}b.disabled=true;const {error}=await sb.rpc("agregar_puntos_casa",{p_casa_id:b.dataset.house,p_cantidad:n});if(error)notify(error.message);else notify("Puntos añadidos.");await refresh("casas")})}function evaluations(){view.innerHTML='<section class="panel"><div class="panel-head"><h2>Evaluaciones y feedback</h2><span class="muted">Publica calificaciones privadas para cada integrante.</span></div><form id="evalForm" class="inline-form"><select id="evalMember" required><option value="">Integrante</option>'+data.members.filter(x=>x.activo).map(x=>'<option value="'+x.id+'">'+esc(x.nombre_completo)+'</option>').join("")+'</select><select id="evalActivity" required><option value="">Actividad o debate</option>'+data.activities.map(x=>'<option value="'+x.id+'">'+esc(x.nombre)+' · '+esc(x.tipo||"Actividad")+'</option>').join("")+'</select><input id="evalTotal" type="number" min="0" step="0.01" placeholder="Calificación" required><input id="evalMax" type="number" min="1" step="0.01" placeholder="Máximo" value="100" required><textarea id="evalCriteria" rows="3" placeholder="Criterios, uno por línea. Ej.: Argumentación: 18/20"></textarea><textarea id="evalFeedback" rows="4" placeholder="Feedback personalizado para este integrante"></textarea><button class="btn ok">Guardar evaluación</button></form><div class="list">'+(data.evaluations.length?data.evaluations.map(e=>{const m=data.members.find(x=>x.id===e.integrante_id),a=data.activities.find(x=>x.id===e.actividad_id);return '<div class="row"><div><b>'+esc(m?.nombre_completo||"Integrante")+'</b><small>'+esc(a?.nombre||"Actividad")+' · '+esc(e.total??"")+'/'+esc(e.maximo??"")+'</small><p class="muted">'+esc(e.feedback||"Sin feedback")+'</p></div></div>'}).join(""):'<p class="empty">No hay evaluaciones registradas.</p>')+'</div></section>';document.getElementById("evalForm").onsubmit=async e=>{e.preventDefault();const lines=document.getElementById("evalCriteria").value.split("\n").map(s=>s.trim()).filter(Boolean).map(s=>{const parts=s.split(":");const nombre=parts.shift()?.trim()||"Criterio";const v=parts.join(":").split("/");return {nombre,puntuacion:(v[0]||"").trim(),maximo:(v[1]||"").trim()||null}});const payload={actividad_id:document.getElementById("evalActivity").value,integrante_id:document.getElementById("evalMember").value,total:Number(document.getElementById("evalTotal").value),maximo:Number(document.getElementById("evalMax").value),criterios:lines,feedback:document.getElementById("evalFeedback").value.trim(),evaluador:me.user_id,actualizado_en:new Date().toISOString()};const {error}=await sb.from("evaluaciones").upsert(payload,{onConflict:"actividad_id,integrante_id"});if(error)notify(error.message);else notify("Evaluación publicada.");await refresh("evaluaciones")}}function stats(){view.innerHTML='<section class="panel"><div class="panel-head"><h2>Estadísticas</h2><span class="muted">Solo datos registrados</span></div><div class="chartbox"><canvas id="chart"></canvas></div></section>';new Chart(document.getElementById("chart"),{type:"doughnut",data:{labels:["Activos","Pendientes","Actividades","Competencias"],datasets:[{data:[active(),data.pending.length,data.activities.length,data.competitions.length],backgroundColor:["#4d9fff","#dfbc66","#62bd86","#d77872"],borderColor:"#0b1020",borderWidth:5}]},options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:"#a8b3c7",padding:18}}}}})}function crud(kind){const isA=kind==="actividades",arr=isA?data.activities:data.competitions,table=isA?"actividades":"competencias";view.innerHTML='<section class="panel"><div class="panel-head"><h2>'+ (isA?"Actividades":"Competencias")+'</h2><span class="muted">Crear y administrar</span></div><form id="newItem" class="inline-form"><input id="itemName" placeholder="Nombre" required><input id="itemDate" type="date"><select id="itemStatus"><option>Próxima</option><option>En curso</option><option>Finalizada</option></select><input id="itemDesc" placeholder="Descripción"><select id="itemType"><option>Actividad</option><option>Debate</option><option>MUN</option><option>Taller</option></select><button class="btn ok">Crear</button></form>'+list(arr)+'</section>';document.getElementById("newItem").onsubmit=async e=>{e.preventDefault();const payload={nombre:document.getElementById("itemName").value.trim(),descripcion:document.getElementById("itemDesc").value.trim(),fecha:document.getElementById("itemDate").value||null,estado:document.getElementById("itemStatus").value,tipo:document.getElementById("itemType").value};if(isA)payload.creador=me?.user_id||null;const {error}=await sb.from(table).insert(payload);if(error)notify(error.message);else notify("Registro creado.");await refresh(kind)}}async function refresh(v){await load();render(v)}const meta={inicio:["Inicio","Todo lo que ocurre en NOVA, en un solo lugar."],integrantes:["Integrantes","Personas aprobadas y activas dentro del club."],preregistros:["Pre-registros","Revisa y decide sobre las solicitudes pendientes."],casas:["Casas","La competencia de NOVA, actualizada en tiempo real."],estadisticas:["Estadísticas","Lectura visual de los datos reales del sistema."],actividades:["Actividades","Organiza el calendario y el estado de las actividades."],competencias:["Competencias","Administra las competencias y sus resultados."],evaluaciones:["Evaluaciones","Calificaciones y feedback personalizados para cada integrante."],configuracion:["Configuración","Sesión y parámetros principales de NOVA."]};async function render(v="inicio"){title.textContent=meta[v]?.[0]||"Inicio";subtitle.textContent=meta[v]?.[1]||"";if(chart){chart.destroy();chart=null}({inicio:home,integrantes:members,preregistros:prereg,casas:houses,estadisticas:stats,actividades:()=>crud("actividades"),competencias:()=>crud("competencias"),evaluaciones,configuracion:()=>{view.innerHTML='<section class="panel"><div class="panel-head"><h2>Configuración</h2></div><p class="muted">Sesión activa: '+esc(me?.email)+'</p><p class="muted">Capacidad máxima: 200 integrantes.</p></section>'}}[v]||home)()}document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-view]").forEach(x=>x.classList.remove("active"));b.classList.add("active");render(b.dataset.view)});document.getElementById("logout").onclick=async()=>{await sb.auth.signOut();location.href="index.html"};let liveTimer;sb.channel("nova-live").on("postgres_changes",{event:"*",schema:"public",table:"pre_registros"},()=>{clearTimeout(liveTimer);liveTimer=setTimeout(()=>refresh("preregistros"),250)}).on("postgres_changes",{event:"*",schema:"public",table:"integrantes"},()=>{clearTimeout(liveTimer);liveTimer=setTimeout(()=>refresh("integrantes"),250)}).on("postgres_changes",{event:"*",schema:"public",table:"casas"},()=>{clearTimeout(liveTimer);liveTimer=setTimeout(()=>refresh("casas"),250)}).on("postgres_changes",{event:"*",schema:"public",table:"evaluaciones"},()=>{clearTimeout(liveTimer);liveTimer=setTimeout(()=>refresh("evaluaciones"),250)}).subscribe();(async()=>{if(await guard()){await load();render()}})();
+/* NOVA Dashboard v2: navegación independiente de la carga de datos. */
+(function () {
+  "use strict";
+
+  const SUPABASE_URL = "https://hogbjrbaeedlyglegjle.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_NWG23rPztabdaFhEyNtN5w_rrCeMTC5";
+
+  const view = document.getElementById("view");
+  const title = document.getElementById("viewTitle");
+  const subtitle = document.getElementById("viewSubtitle");
+  const toast = document.getElementById("toast");
+  const profileName = document.getElementById("profileName");
+
+  let sb = null;
+  let me = null;
+  let chart = null;
+  let data = {
+    members: [], pending: [], houses: [], activities: [], competitions: [], evaluations: []
+  };
+
+  const meta = {
+    inicio: ["Inicio", "Todo lo que ocurre en NOVA, en un solo lugar."],
+    integrantes: ["Integrantes", "Personas aprobadas y activas dentro del club."],
+    preregistros: ["Pre-registros", "Revisa y decide sobre las solicitudes pendientes."],
+    casas: ["Casas", "La competencia de NOVA, actualizada en tiempo real."],
+    estadisticas: ["Estadísticas", "Lectura visual de los datos reales del sistema."],
+    actividades: ["Actividades", "Organiza el calendario y el estado de las actividades."],
+    competencias: ["Competencias", "Administra las competencias y sus resultados."],
+    evaluaciones: ["Evaluaciones", "Calificaciones y feedback personalizados para cada integrante."],
+    configuracion: ["Configuración", "Sesión y parámetros principales de NOVA."]
+  };
+
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", """: "&quot;", "'": "&#39;"
+  }[c]));
+
+  function notify(message) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add("show");
+    clearTimeout(notify.timer);
+    notify.timer = setTimeout(() => toast.classList.remove("show"), 2800);
+  }
+
+  function showLoading(message = "Cargando datos de NOVA...") {
+    view.innerHTML = '<section class="panel"><p class="empty">' + esc(message) + "</p></section>";
+  }
+
+  function active() {
+    return data.members.filter(x => x.activo).length;
+  }
+
+  function houseSymbol(name) {
+    return { Pegaso: "♧", Cronos: "⌛", "Fénix": "ϟ", Argos: "◉", Olimpo: "♛" }[name] || "✦";
+  }
+
+  function houseStyle(name) {
+    return {
+      Pegaso: "#e9e5da", Cronos: "#4f99ff", "Fénix": "#dfbc66",
+      Argos: "#62bd86", Olimpo: "#d77872"
+    }[name] || "#5b9dff";
+  }
+
+  function setActive(button) {
+    document.querySelectorAll("[data-view]").forEach(b => b.classList.remove("active"));
+    if (button) button.classList.add("active");
+  }
+
+  function render(viewName = "inicio") {
+    const info = meta[viewName] || meta.inicio;
+    title.textContent = info[0];
+    subtitle.textContent = info[1];
+
+    if (chart) {
+      try { chart.destroy(); } catch (_) {}
+      chart = null;
+    }
+
+    const pages = {
+      inicio: home,
+      integrantes: members,
+      preregistros: prereg,
+      casas: houses,
+      estadisticas: stats,
+      actividades: () => crud("actividades"),
+      competencias: () => crud("competencias"),
+      evaluaciones,
+      configuracion: settings
+    };
+
+    (pages[viewName] || home)();
+  }
+
+  function home() {
+    view.innerHTML =
+      '<div class="hero-grid">' +
+        '<section class="welcome"><span class="eyebrow">NOVA · 2026 / 2027</span>' +
+        '<h2>El centro de mando para una generación que lidera.</h2>' +
+        '<p>Gestiona integrantes, solicitudes, casas, actividades y competencias desde un solo espacio.</p>' +
+        '<span class="status"><i class="status-dot"></i>Sistema conectado</span></section>' +
+        '<div class="quick">' +
+          '<div class="quick-card"><span>PENDIENTES</span><b>' + data.pending.length + '</b><small>Solicitudes por revisar</small></div>' +
+          '<div class="quick-card"><span>CAPACIDAD</span><b>' + active() + ' / 200</b><small>Cupos ocupados</small></div>' +
+          '<div class="quick-card"><span>ACTIVIDADES</span><b>' + data.activities.length + '</b><small>En el sistema</small></div>' +
+          '<div class="quick-card"><span>COMPETENCIAS</span><b>' + data.competitions.length + '</b><small>En el sistema</small></div>' +
+        '</div>' +
+      '</div>' +
+      metrics() +
+      '<div class="dashboard-grid">' +
+        '<section class="panel"><div class="panel-head"><h2>Rendimiento de NOVA</h2><p>Datos actuales</p></div><div class="chartbox"><canvas id="homeChart"></canvas></div></section>' +
+        '<section class="panel"><div class="panel-head"><h2>Ranking de Casas</h2><p>Actualización en vivo</p></div><div class="ranking">' +
+          data.houses.map((h, i) =>
+            '<div class="rank"><span class="rank-number">#' + (i + 1) + '</span>' +
+            '<span class="rank-symbol" style="--house:' + houseStyle(h.nombre) + '">' + houseSymbol(h.nombre) + '</span>' +
+            '<span>' + esc(h.nombre) + '</span><b>' + Number(h.puntos || 0) + ' pts</b></div>'
+          ).join("") +
+        '</div></section>' +
+      '</div>' +
+      '<section class="panel"><div class="panel-head"><h2>Próximos movimientos</h2><p>Actividades</p></div>' +
+      list(data.activities.slice(0, 5)) + '</section>';
+
+    drawHomeChart();
+  }
+
+  function metrics() {
+    return '<div class="metric-grid">' +
+      '<div class="metric-card"><span>INTEGRANTES ACTIVOS</span><b>' + active() + '</b><small>de 200 cupos</small></div>' +
+      '<div class="metric-card"><span>PRE-REGISTROS</span><b>' + data.pending.length + '</b><small>esperando revisión</small></div>' +
+      '<div class="metric-card"><span>CASAS</span><b>' + data.houses.length + '</b><small>competencia activa</small></div>' +
+      '<div class="metric-card"><span>ACTIVIDADES</span><b>' + data.activities.length + '</b><small>registradas</small></div>' +
+    '</div>';
+  }
+
+  function drawHomeChart() {
+    const canvas = document.getElementById("homeChart");
+    if (!canvas || !window.Chart) return;
+    try {
+      chart = new window.Chart(canvas, {
+        type: "line",
+        data: {
+          labels: ["Integrantes", "Pre-registros", "Actividades", "Competencias"],
+          datasets: [{
+            data: [active(), data.pending.length, data.activities.length, data.competitions.length],
+            borderColor: "#4d9fff",
+            backgroundColor: "#4d9fff18",
+            fill: true,
+            tension: 0.38,
+            pointRadius: 4,
+            pointBackgroundColor: "#dfbc66"
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: "#71809a" } },
+            y: { beginAtZero: true, grid: { color: "#1d293c" }, ticks: { color: "#71809a", precision: 0 } }
+          }
+        }
+      });
+    } catch (error) {
+      console.error("NOVA chart error", error);
+    }
+  }
+
+  function list(items) {
+    return items.length
+      ? items.map(x => '<div class="row"><div><b>' + esc(x.nombre) + '</b><small>' +
+          esc(x.fecha || "Sin fecha") + " · " + esc(x.estado || "Sin estado") +
+          "</small></div></div>").join("")
+      : '<p class="empty">No hay registros todavía.</p>';
+  }
+
+  function members() {
+    view.innerHTML =
+      '<section class="panel"><div class="panel-head"><h2>Integrantes</h2><span class="muted">' + active() +
+      ' activos</span></div><div class="toolbar"><input id="search" placeholder="Buscar nombre, correo o usuario"></div>' +
+      '<div class="table-wrap"><table class="table"><thead><tr><th>Nombre</th><th>Usuario</th><th>Casa</th><th>Correo</th><th>Estado</th></tr></thead>' +
+      '<tbody id="memberRows">' + memberRows(data.members) + '</tbody></table></div></section>';
+
+    const search = document.getElementById("search");
+    if (search) search.oninput = e => {
+      const q = e.target.value.toLowerCase();
+      const rows = data.members.filter(x =>
+        (String(x.nombre_completo || "") + " " + String(x.email || "") + " " + String(x.username || "")).toLowerCase().includes(q)
+      );
+      document.getElementById("memberRows").innerHTML = memberRows(rows);
+      bindMemberHouses();
+    };
+    bindMemberHouses();
+  }
+
+  function memberRows(items) {
+    if (!items.length) return '<tr><td colspan="5" class="empty">No hay integrantes.</td></tr>';
+    return items.map(x =>
+      '<tr><td><b>' + esc(x.nombre_completo) + '</b></td><td>' + esc(x.username) + '</td><td>' +
+      '<select data-member-house="' + x.id + '" style="background:#080d17;color:#fff;border:1px solid #263249;border-radius:8px;padding:7px">' +
+      '<option value="">Sin asignar</option>' +
+      data.houses.map(h => '<option value="' + h.id + '" ' + (x.casa_id === h.id ? "selected" : "") + '>' + esc(h.nombre) + '</option>').join("") +
+      '</select></td><td>' + esc(x.email) + '</td><td><span class="badge">' +
+      (x.activo ? "Activo" : "Inactivo") + "</span></td></tr>"
+    ).join("");
+  }
+
+  function bindMemberHouses() {
+    document.querySelectorAll("[data-member-house]").forEach(select => {
+      select.onchange = async () => {
+        if (!sb) return notify("La conexión con Supabase todavía no está lista.");
+        const { error } = await sb.from("integrantes").update({ casa_id: select.value || null }).eq("id", select.dataset.memberHouse);
+        if (error) return notify(error.message);
+        const member = data.members.find(x => x.id === select.dataset.memberHouse);
+        if (member) member.casa_id = select.value || null;
+        notify("Casa actualizada.");
+      };
+    });
+  }
+
+  function prereg() {
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>Solicitudes pendientes</h2><span class="muted">' +
+      data.pending.length + ' por revisar</span></div>' +
+      (data.pending.length ? data.pending.map(x =>
+        '<div class="row"><div><b>' + esc(x.nombre_completo) + '</b><small>' +
+        esc(x.curso) + " " + esc(x.seccion) + " · " + esc(x.email) + " · " + esc(x.username) +
+        '</small></div><div class="actions"><button class="btn ok" data-ok="' + x.id + '">Aprobar</button>' +
+        '<button class="btn no" data-no="' + x.id + '">Rechazar</button></div></div>'
+      ).join("") : '<p class="empty">No hay solicitudes pendientes.</p>') + '</section>';
+
+    document.querySelectorAll("[data-ok]").forEach(button => {
+      button.onclick = async () => {
+        if (!sb) return notify("La conexión no está lista.");
+        button.disabled = true;
+        const { error } = await sb.rpc("aprobar_pre_registro", { p_pre_registro_id: button.dataset.ok });
+        if (error) notify(error.message); else notify("Integrante aprobado correctamente.");
+        await refresh("preregistros");
+      };
+    });
+
+    document.querySelectorAll("[data-no]").forEach(button => {
+      button.onclick = async () => {
+        if (!confirm("¿Rechazar este pre-registro?")) return;
+        const { error } = await sb.rpc("rechazar_pre_registro", { p_pre_registro_id: button.dataset.no });
+        if (error) notify(error.message); else notify("Pre-registro rechazado.");
+        await refresh("preregistros");
+      };
+    });
+  }
+
+  function houses() {
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>Casas</h2><span class="muted">Puntos directos · ranking vivo</span></div>' +
+      '<div class="house-grid">' + data.houses.map(h =>
+        '<article class="house" style="--house:' + houseStyle(h.nombre) + '"><div class="house-symbol">' + houseSymbol(h.nombre) +
+        '</div><h3>' + esc(h.nombre) + '</h3><strong>' + Number(h.puntos || 0) + '</strong> <small>pts</small>' +
+        '<div style="display:flex;gap:7px;margin-top:13px"><input id="pts-' + h.id +
+        '" type="number" min="1" placeholder="+ puntos" style="width:100%;background:#080d17;border:1px solid #263249;color:#fff;border-radius:9px;padding:8px">' +
+        '<button class="btn ok" data-house="' + h.id + '">Añadir</button></div></article>'
+      ).join("") + '</div></section>';
+
+    document.querySelectorAll("[data-house]").forEach(button => {
+      button.onclick = async () => {
+        if (!sb) return notify("La conexión no está lista.");
+        const n = Number(document.getElementById("pts-" + button.dataset.house).value);
+        if (!Number.isInteger(n) || n < 1) return notify("Introduce una cantidad válida.");
+        button.disabled = true;
+        const { error } = await sb.rpc("agregar_puntos_casa", { p_casa_id: button.dataset.house, p_cantidad: n });
+        if (error) notify(error.message); else notify("Puntos añadidos.");
+        await refresh("casas");
+      };
+    });
+  }
+
+  function stats() {
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>Estadísticas</h2><span class="muted">Solo datos registrados</span></div>' +
+      '<div class="chartbox"><canvas id="chart"></canvas></div></section>';
+    if (!window.Chart) return;
+    new window.Chart(document.getElementById("chart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Activos", "Pendientes", "Actividades", "Competencias"],
+        datasets: [{ data: [active(), data.pending.length, data.activities.length, data.competitions.length],
+          backgroundColor: ["#4d9fff", "#dfbc66", "#62bd86", "#d77872"], borderColor: "#0b1020", borderWidth: 5 }]
+      },
+      options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#a8b3c7", padding: 18 } } } }
+    });
+  }
+
+  function evaluations() {
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>Evaluaciones y feedback</h2><span class="muted">Publica calificaciones privadas para cada integrante.</span></div>' +
+      '<form id="evalForm" class="inline-form">' +
+      '<select id="evalMember" required><option value="">Integrante</option>' +
+      data.members.filter(x => x.activo).map(x => '<option value="' + x.id + '">' + esc(x.nombre_completo) + '</option>').join("") + '</select>' +
+      '<select id="evalActivity" required><option value="">Actividad o debate</option>' +
+      data.activities.map(x => '<option value="' + x.id + '">' + esc(x.nombre) + ' · ' + esc(x.tipo || "Actividad") + '</option>').join("") + '</select>' +
+      '<input id="evalTotal" type="number" min="0" step="0.01" placeholder="Calificación" required>' +
+      '<input id="evalMax" type="number" min="1" step="0.01" placeholder="Máximo" value="100" required>' +
+      '<textarea id="evalCriteria" rows="3" placeholder="Criterios, uno por línea"></textarea>' +
+      '<textarea id="evalFeedback" rows="4" placeholder="Feedback personalizado para este integrante"></textarea>' +
+      '<button class="btn ok">Guardar evaluación</button></form>' +
+      '<div class="list">' +
+      (data.evaluations.length ? data.evaluations.map(e => {
+        const m = data.members.find(x => x.id === e.integrante_id);
+        const a = data.activities.find(x => x.id === e.actividad_id);
+        return '<div class="row"><div><b>' + esc(m?.nombre_completo || "Integrante") + '</b><small>' +
+          esc(a?.nombre || "Actividad") + " · " + esc(e.total ?? "") + "/" + esc(e.maximo ?? "") +
+          '</small><p class="muted">' + esc(e.feedback || "Sin feedback") + "</p></div></div>";
+      }).join("") : '<p class="empty">No hay evaluaciones registradas.</p>') + "</div></section>";
+
+    const form = document.getElementById("evalForm");
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const payload = {
+        actividad_id: document.getElementById("evalActivity").value,
+        integrante_id: document.getElementById("evalMember").value,
+        total: Number(document.getElementById("evalTotal").value),
+        maximo: Number(document.getElementById("evalMax").value),
+        criterios: [],
+        feedback: document.getElementById("evalFeedback").value.trim(),
+        evaluador: me?.user_id || null,
+        actualizado_en: new Date().toISOString()
+      };
+      const { error } = await sb.from("evaluaciones").upsert(payload, { onConflict: "actividad_id,integrante_id" });
+      if (error) notify(error.message); else notify("Evaluación publicada.");
+      await refresh("evaluaciones");
+    };
+  }
+
+  function crud(kind) {
+    const isActivities = kind === "actividades";
+    const items = isActivities ? data.activities : data.competitions;
+    const table = isActivities ? "actividades" : "competencias";
+
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>' +
+      (isActivities ? "Actividades" : "Competencias") + '</h2><span class="muted">Crear y administrar</span></div>' +
+      '<form id="newItem" class="inline-form"><input id="itemName" placeholder="Nombre" required>' +
+      '<input id="itemDate" type="date"><select id="itemStatus"><option>Próxima</option><option>En curso</option><option>Finalizada</option></select>' +
+      '<input id="itemDesc" placeholder="Descripción"><select id="itemType"><option>Actividad</option><option>Debate</option><option>MUN</option><option>Taller</option></select>' +
+      '<button class="btn ok">Crear</button></form>' + list(items) + "</section>";
+
+    document.getElementById("newItem").onsubmit = async e => {
+      e.preventDefault();
+      const payload = {
+        nombre: document.getElementById("itemName").value.trim(),
+        descripcion: document.getElementById("itemDesc").value.trim(),
+        fecha: document.getElementById("itemDate").value || null,
+        estado: document.getElementById("itemStatus").value,
+        tipo: document.getElementById("itemType").value
+      };
+      if (isActivities) payload.creador = me?.user_id || null;
+      const { error } = await sb.from(table).insert(payload);
+      if (error) notify(error.message); else notify("Registro creado.");
+      await refresh(kind);
+    };
+  }
+
+  function settings() {
+    view.innerHTML = '<section class="panel"><div class="panel-head"><h2>Configuración</h2></div>' +
+      '<p class="muted">Sesión activa: ' + esc(me?.email) + '</p><p class="muted">Capacidad máxima: 200 integrantes.</p></section>';
+  }
+
+  async function load() {
+    if (!sb) return;
+    const requests = [
+      ["members", sb.from("integrantes").select("*").order("fecha_aprobacion", { ascending: false })],
+      ["pending", sb.from("pre_registros").select("*").order("fecha_registro", { ascending: false })],
+      ["houses", sb.from("casas").select("*").order("puntos", { ascending: false })],
+      ["activities", sb.from("actividades").select("*").order("fecha", { ascending: true })],
+      ["competitions", sb.from("competencias").select("*").order("fecha", { ascending: true })],
+      ["evaluations", sb.from("evaluaciones").select("*").order("fecha_evaluacion", { ascending: false })]
+    ];
+
+    const results = await Promise.allSettled(requests.map(async ([key, query]) => [key, await query]));
+    const errors = [];
+
+    for (const result of results) {
+      if (result.status !== "fulfilled") {
+        errors.push("No se pudo consultar una sección.");
+        continue;
+      }
+      const [key, response] = result.value;
+      if (response.error) {
+        errors.push(key + ": " + response.error.message);
+        continue;
+      }
+      const rows = response.data || [];
+      if (key === "members") data.members = rows;
+      if (key === "pending") data.pending = rows.filter(x => x.estado === "pendiente");
+      if (key === "houses") data.houses = rows;
+      if (key === "activities") data.activities = rows;
+      if (key === "competitions") data.competitions = rows;
+      if (key === "evaluations") data.evaluations = rows;
+    }
+
+    if (errors.length) {
+      console.error("NOVA data errors", errors);
+      notify("Algunos datos no pudieron cargarse. La navegación sigue disponible.");
+    }
+  }
+
+  async function refresh(target) {
+    showLoading("Actualizando NOVA...");
+    await load();
+    render(target);
+  }
+
+  async function init() {
+    try {
+      if (!window.supabase) {
+        showLoading("Preparando la conexión segura...");
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+        script.onload = () => init();
+        script.onerror = () => notify("No se pudo cargar la conexión con Supabase.");
+        document.head.appendChild(script);
+        return;
+      }
+
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true }
+      });
+
+      /* La navegación se activa ANTES de cualquier consulta a Supabase. */
+      document.querySelectorAll("[data-view]").forEach(button => {
+        button.onclick = () => {
+          setActive(button);
+          render(button.dataset.view);
+        };
+      });
+
+      document.getElementById("logout").onclick = async () => {
+        try { await sb.auth.signOut(); } finally { location.href = "index.html"; }
+      };
+
+      /* Primero pintamos el dashboard para que nunca quede una pantalla vacía. */
+      render("inicio");
+
+      const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+      if (sessionError || !sessionData?.session) {
+        location.href = "index.html";
+        return;
+      }
+
+      const { data: directiva, error: directivaError } = await sb
+        .from("directiva")
+        .select("user_id,nombre,email")
+        .eq("user_id", sessionData.session.user.id)
+        .maybeSingle();
+
+      if (directivaError || !directiva) {
+        await sb.auth.signOut();
+        location.href = "index.html";
+        return;
+      }
+
+      me = directiva;
+      if (profileName) profileName.textContent = directiva.nombre || "Directiva";
+
+      await load();
+      render("inicio");
+
+      sb.channel("nova-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "pre_registros" }, () => refresh("preregistros"))
+        .on("postgres_changes", { event: "*", schema: "public", table: "integrantes" }, () => refresh("integrantes"))
+        .on("postgres_changes", { event: "*", schema: "public", table: "casas" }, () => refresh("casas"))
+        .on("postgres_changes", { event: "*", schema: "public", table: "evaluaciones" }, () => refresh("evaluaciones"))
+        .subscribe();
+    } catch (error) {
+      console.error("NOVA dashboard fatal error", error);
+      showLoading("El dashboard encontró un error. La navegación debería seguir disponible.");
+      notify("Error del dashboard: " + (error.message || "error desconocido"));
+    }
+  }
+
+  /* Si el CDN ya está listo, arranca inmediatamente. Si no, init lo carga. */
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
